@@ -42,6 +42,15 @@
   .group b { font-size:16px; }
   .group small { color:var(--quiet); display:block; margin-top:2px; }
   .group ul { list-style:none; padding:0; margin:8px 0 0; }
+  .tgt { margin-top:10px; background:#0F0F0F; border-radius:10px; padding:10px 12px; }
+  .tgt .hd { color:var(--lane); font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+  .tgt .row { display:flex; gap:10px; align-items:baseline; font-size:14px; padding:3px 0; }
+  .tgt .row .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tgt .row .pc { font:700 14px ui-monospace, SFMono-Regular, Menlo, monospace; white-space:nowrap; }
+  .tgt .row .sub { color:var(--quiet); font-size:12px; white-space:nowrap; }
+  .tgt .gh { color:var(--quiet); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; margin-top:8px; }
+  .group .pace { color:var(--quiet); font-size:13px; margin-top:6px; }
+  .group .pace b { color:var(--ink); font:700 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
   .msg { color:var(--quiet); padding:40px 0; text-align:center; }
   footer { color:var(--quiet); font-size:12px; margin-top:36px; text-align:center; }
 </style>
@@ -70,6 +79,97 @@
   }
   function addDays(d, n) { var x = parse(d); x.setDate(x.getDate() + n); return iso(x); }
   function fmt(d, opts) { return parse(d).toLocaleDateString(undefined, opts); }
+  // ─── Daniels paces (the same formulas as the app's PaceMath) ───────────────────────────
+  // A fitness score is the Daniels–Gilbert aerobic score. Paces are seconds per metre.
+  var MILE = 1609.344;
+  function vo2(v) { return -4.60 + 0.182258 * v + 0.000104 * v * v; }
+  function frac(t) { return 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t); }
+  function speedFor(target) { var a = 0.000104, b = 0.182258, c = -4.60 - target; return (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a); }
+  function raceMinutes(meters, score) {
+    var t = meters / speedFor(score * 0.9);
+    for (var i = 0; i < 40; i++) {
+      var f = score * frac(t) - vo2(meters / t), h = 1e-4;
+      var d = ((score * frac(t + h) - vo2(meters / (t + h))) - f) / h;
+      if (!d) break;
+      var n = t - f / d;
+      if (Math.abs(n - t) < 1e-7) { t = n; break; }
+      t = Math.max(n, 0.5);
+    }
+    return t;
+  }
+  var ZONES = { E:"Easy", M:"Marathon", T:"Threshold", I:"Interval", R:"Repetition" };
+  function zone(key, score) {
+    var e = score < 39 ? score * 2 / 3 + 13 : score, th = score < 39 ? (e + score) / 2 : score;
+    function at(share, s) { return 60 / speedFor(s * share); }
+    function band(x) { return [x / 1.015, x / 0.985]; }
+    var i = at(0.975, e);
+    switch (key) {
+      case "E": return [at(0.70, e), at(0.62, e)];
+      case "M": return band(raceMinutes(42195, score) * 60 / 42195);
+      case "T": return band(at(0.88, th));
+      case "I": return band(i);
+      case "R": return band(i - 6 / 400);
+    }
+    return null;
+  }
+  function clock(sec, tenths) {
+    if (!isFinite(sec) || sec <= 0) return "–";
+    if (tenths && sec < 60) return sec.toFixed(1);
+    var w = Math.round(sec);
+    return w >= 60 ? Math.floor(w / 60) + ":" + String(w % 60).padStart(2, "0") : String(w);
+  }
+  function range(z, meters, tenths) {
+    var a = clock(z[0] * meters, tenths), b = clock(z[1] * meters, tenths);
+    return a === b ? a : a + "–" + b;
+  }
+  function repLabel(m) { return m === 1600 ? "mile" : (m % 1000 === 0 ? (m / 1000) + "k" : m + "m"); }
+  function repMeters(m) { return m === 1600 ? MILE : m; }
+  function minutes(z, miles) {
+    var a = Math.round(z[0] * miles * MILE / 60), b = Math.round(z[1] * miles * MILE / 60);
+    return a === b ? a + " min" : a + "–" + b + " min";
+  }
+  function milesLabel(m) { return (Math.round(m) === m ? m : m.toFixed(1)) + " mi"; }
+  function row(name, pace, sub) {
+    var r = el("div", "row");
+    r.appendChild(el("span", "nm", name));
+    if (sub) r.appendChild(el("span", "sub", sub));
+    r.appendChild(el("span", "pc", pace));
+    return r;
+  }
+
+  // A workout's targets: easy-type runs at each group's midpoint pace; a workout at each
+  // runner's own pace (or the group's, when the coach keeps runners' paces off the page).
+  function targets(w, groupsById) {
+    var miles = w.miles != null ? Number(w.miles) : null;
+    if (!w.zone && !miles) return null;
+    var perRunner = w.kind ? w.kind === "workout" : ["T", "I", "R"].indexOf(w.zone) >= 0;
+    var meters = w.meters || 400;
+    var box = el("div", "tgt");
+    var head = [];
+    if (miles) head.push(milesLabel(miles));
+    if (w.zone) head.push(ZONES[w.zone] + " pace");
+    if (w.zone && perRunner) head.push("per " + repLabel(meters));
+    box.appendChild(el("div", "hd", head.join(" · ")));
+    if (!w.zone) return box;
+    var gs = (w.groups || []).map(function (wg) { return groupsById[wg.id]; }).filter(Boolean);
+    gs.forEach(function (g) {
+      var runners = perRunner ? (g.runners || []) : [];
+      if (runners.length) {
+        if (gs.length > 1) box.appendChild(el("div", "gh", g.name));
+        runners.forEach(function (r) {
+          var z = zone(w.zone, Number(r.s));
+          if (z) box.appendChild(row(r.n, range(z, repMeters(meters), meters <= 300)));
+        });
+      } else if (g.mid != null) {
+        var z = zone(w.zone, Number(g.mid));
+        if (!z) return;
+        if (perRunner) box.appendChild(row(g.name, range(z, repMeters(meters), meters <= 300), "per " + repLabel(meters)));
+        else box.appendChild(row(g.name, range(z, MILE) + "/mi", miles ? "about " + minutes(z, miles) : null));
+      }
+    });
+    return box;
+  }
+
   function message(text) { app.textContent = ""; app.appendChild(el("p", "msg", text)); }
 
   function load(week) {
@@ -131,6 +231,8 @@
           tags.appendChild(t);
         });
         if (tags.childNodes.length) item.appendChild(tags);
+        var t = targets(w, groupsById);
+        if (t) item.appendChild(t);
         (w.groups || []).forEach(function (wg) {
           var g = groupsById[wg.id];
           if (g && wg.note) item.appendChild(el("div", "note", g.name + ": " + wg.note));
@@ -149,6 +251,12 @@
         card.style.borderLeftColor = COLORS[g.color] || COLORS.gray;
         card.appendChild(el("b", null, g.name));
         card.appendChild(el("small", null, [g.guild, g.size + (g.size === 1 ? " athlete" : " athletes")].filter(Boolean).join(" · ")));
+        if (g.mid != null) {
+          var ez = zone("E", Number(g.mid));
+          var p = el("div", "pace", "Easy runs ");
+          p.appendChild(el("b", null, range(ez, MILE) + "/mi"));
+          card.appendChild(p);
+        }
         if ((g.athletes || []).length) {
           var ul = el("ul");
           g.athletes.forEach(function (n) { ul.appendChild(el("li", null, n)); });
