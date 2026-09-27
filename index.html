@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Team schedule</title>
+<!--
+  The weekly schedule a Team Spike coach shares by link. This page holds no team data: it reads
+  the week from the team-page function using the link's token (?t=...). Names are first name and
+  last initial, and only if the coach allows them. Everything is drawn with textContent.
+-->
+<style>
+  :root { --ground:#0A0A0A; --surface:#161616; --ink:#F5F5F5; --quiet:#9A9A9A; --line:#2A2A2A; --lane:#FF4D00; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink); font:16px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:20px 16px 48px; }
+  .team { display:inline-block; background:var(--lane); color:#000; font-weight:800; letter-spacing:.04em;
+          text-transform:uppercase; font-size:13px; padding:5px 14px; transform:skewX(-10deg); }
+  h1 { font-size:34px; line-height:1.05; margin:14px 0 4px; font-style:italic; font-weight:900; text-transform:uppercase; }
+  .nav { display:flex; gap:8px; align-items:center; margin:12px 0 20px; }
+  .nav button { background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:10px;
+                font:600 15px system-ui; padding:9px 14px; min-height:44px; }
+  .nav button:disabled { opacity:.35; }
+  .nav .sp { flex:1; }
+  h2 { font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--quiet); margin:28px 0 10px; }
+  .day { background:var(--surface); border-radius:14px; padding:14px 16px; margin-bottom:10px; }
+  .day h3 { margin:0 0 8px; font-size:17px; }
+  .day.today h3::after { content:"TODAY"; margin-left:8px; font-size:11px; color:var(--lane); letter-spacing:.08em; }
+  .w { border-top:1px solid var(--line); padding-top:10px; margin-top:10px; }
+  .w:first-of-type { border-top:0; padding-top:0; margin-top:0; }
+  .w b { display:block; font-size:16px; }
+  .w p { margin:4px 0 0; white-space:pre-wrap; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .tag { font-size:12px; font-weight:700; padding:3px 9px; border-radius:99px; border:1.5px solid; }
+  .note { color:var(--quiet); font-size:14px; margin-top:4px; }
+  .meet { color:var(--lane); font-weight:700; }
+  .rest { color:var(--quiet); }
+  .groups { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; }
+  .group { background:var(--surface); border-radius:14px; padding:14px 16px; border-left:5px solid; }
+  .group b { font-size:16px; }
+  .group small { color:var(--quiet); display:block; margin-top:2px; }
+  .group ul { list-style:none; padding:0; margin:8px 0 0; }
+  .msg { color:var(--quiet); padding:40px 0; text-align:center; }
+  footer { color:var(--quiet); font-size:12px; margin-top:36px; text-align:center; }
+</style>
+</head>
+<body>
+<main id="app"><p class="msg">Loading…</p></main>
+<script>
+(function () {
+  "use strict";
+  var API = "https://lluwkizjktpnezxmcsys.supabase.co/functions/v1/team-page";
+  var COLORS = { lane:"#FF4D00", amber:"#FFB000", green:"#39FF6A", blue:"#3DA5FF", purple:"#B77CFF", pink:"#FF5FA8", gray:"#9A9A9A" };
+  var params = new URLSearchParams(location.search);
+  var token = params.get("t") || "";
+  var app = document.getElementById("app");
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function parse(d) { var p = d.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function iso(date) {
+    var m = String(date.getMonth() + 1).padStart(2, "0"), d = String(date.getDate()).padStart(2, "0");
+    return date.getFullYear() + "-" + m + "-" + d;
+  }
+  function addDays(d, n) { var x = parse(d); x.setDate(x.getDate() + n); return iso(x); }
+  function fmt(d, opts) { return parse(d).toLocaleDateString(undefined, opts); }
+  function message(text) { app.textContent = ""; app.appendChild(el("p", "msg", text)); }
+
+  function load(week) {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) { message("This link isn't complete. Ask your coach for the page link."); return; }
+    var url = API + "?t=" + encodeURIComponent(token) + (week ? "&week=" + week : "");
+    fetch(url).then(function (r) {
+      if (r.status === 404) throw new Error("This page isn't available. Your coach may have turned it off or made a new link.");
+      if (!r.ok) throw new Error("The schedule couldn't be loaded. Try again in a minute.");
+      return r.json();
+    }).then(function (data) {
+      render(data);
+      var u = new URL(location.href);
+      if (data.week === data.this_week) u.searchParams.delete("week"); else u.searchParams.set("week", data.week);
+      history.replaceState(null, "", u);
+    }).catch(function (e) { message(e.message); });
+  }
+
+  function render(data) {
+    app.textContent = "";
+    document.title = data.team + " · schedule";
+    var groupsById = {};
+    (data.groups || []).forEach(function (g) { groupsById[g.id] = g; });
+
+    app.appendChild(el("span", "team", data.team));
+    app.appendChild(el("h1", null, "Week of " + fmt(data.week, { month:"long", day:"numeric" })));
+
+    var nav = el("div", "nav");
+    var prev = el("button", null, "‹ Previous");
+    var next = el("button", null, "Next ›");
+    var now = el("button", null, "This week");
+    prev.disabled = data.week <= addDays(data.this_week, -14);
+    next.disabled = data.week >= addDays(data.this_week, 42);
+    now.disabled = data.week === data.this_week;
+    prev.onclick = function () { load(addDays(data.week, -7)); };
+    next.onclick = function () { load(addDays(data.week, 7)); };
+    now.onclick = function () { load(null); };
+    nav.appendChild(prev); nav.appendChild(el("span", "sp")); nav.appendChild(now); nav.appendChild(next);
+    app.appendChild(nav);
+
+    var today = iso(new Date());
+    app.appendChild(el("h2", null, "Workouts"));
+    for (var i = 0; i < 7; i++) {
+      var day = addDays(data.week, i);
+      var box = el("section", "day" + (day === today ? " today" : ""));
+      box.appendChild(el("h3", null, fmt(day, { weekday:"long", month:"short", day:"numeric" })));
+      (data.meets || []).filter(function (m) { return m.day === day; }).forEach(function (m) {
+        box.appendChild(el("div", "meet", "Meet: " + m.name + (m.location ? " · " + m.location : "")));
+      });
+      var ws = (data.workouts || []).filter(function (w) { return w.day === day; });
+      ws.forEach(function (w) {
+        var item = el("div", "w");
+        item.appendChild(el("b", null, w.title));
+        if (w.body) item.appendChild(el("p", null, w.body));
+        var tags = el("div", "tags");
+        (w.groups || []).forEach(function (wg) {
+          var g = groupsById[wg.id]; if (!g) return;
+          var t = el("span", "tag", g.name);
+          t.style.color = t.style.borderColor = COLORS[g.color] || COLORS.gray;
+          tags.appendChild(t);
+        });
+        if (tags.childNodes.length) item.appendChild(tags);
+        (w.groups || []).forEach(function (wg) {
+          var g = groupsById[wg.id];
+          if (g && wg.note) item.appendChild(el("div", "note", g.name + ": " + wg.note));
+        });
+        box.appendChild(item);
+      });
+      if (!ws.length && !box.querySelector(".meet")) box.appendChild(el("div", "rest", "Nothing posted"));
+      app.appendChild(box);
+    }
+
+    if ((data.groups || []).length) {
+      app.appendChild(el("h2", null, "Training groups"));
+      var grid = el("div", "groups");
+      data.groups.forEach(function (g) {
+        var card = el("div", "group");
+        card.style.borderLeftColor = COLORS[g.color] || COLORS.gray;
+        card.appendChild(el("b", null, g.name));
+        card.appendChild(el("small", null, [g.guild, g.size + (g.size === 1 ? " athlete" : " athletes")].filter(Boolean).join(" · ")));
+        if ((g.athletes || []).length) {
+          var ul = el("ul");
+          g.athletes.forEach(function (n) { ul.appendChild(el("li", null, n)); });
+          card.appendChild(ul);
+        }
+        grid.appendChild(card);
+      });
+      app.appendChild(grid);
+    }
+    app.appendChild(el("footer", null, "Shared by your coaches with Team Spike."));
+  }
+
+  load(params.get("week"));
+})();
+</script>
+</body>
+</html>
