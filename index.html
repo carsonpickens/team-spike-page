@@ -51,6 +51,15 @@
   .tgt .gh { color:var(--quiet); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; margin-top:8px; }
   .group .pace { color:var(--quiet); font-size:13px; margin-top:6px; }
   .group .pace b { color:var(--ink); font:700 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pick { position:sticky; top:0; z-index:5; background:var(--ground); margin:14px -16px 0; padding:10px 16px 12px;
+          border-bottom:1px solid var(--line); }
+  .pick .lbl { color:var(--quiet); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
+  .chips { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chip { flex:none; min-height:40px; padding:0 16px; border-radius:99px; border:2px solid var(--line); background:var(--surface);
+          color:var(--ink); font:700 15px system-ui; white-space:nowrap; }
+  .chip.on { color:#000; }
+  .group.lead { margin-top:16px; }
   .msg { color:var(--quiet); padding:40px 0; text-align:center; }
   footer { color:var(--quiet); font-size:12px; margin-top:36px; text-align:center; }
 </style>
@@ -139,7 +148,7 @@
 
   // A workout's targets: easy-type runs at each group's midpoint pace; a workout at each
   // runner's own pace (or the group's, when the coach keeps runners' paces off the page).
-  function targets(w, groupsById) {
+  function targets(w, groupsById, only) {
     var miles = w.miles != null ? Number(w.miles) : null;
     if (!w.zone && !miles) return null;
     var perRunner = w.kind ? w.kind === "workout" : ["T", "I", "R"].indexOf(w.zone) >= 0;
@@ -151,7 +160,8 @@
     if (w.zone && perRunner) head.push("per " + repLabel(meters));
     box.appendChild(el("div", "hd", head.join(" · ")));
     if (!w.zone) return box;
-    var gs = (w.groups || []).map(function (wg) { return groupsById[wg.id]; }).filter(Boolean);
+    var gs = (w.groups || []).map(function (wg) { return groupsById[wg.id]; })
+      .filter(function (g) { return g && (!only || g.id === only); });
     gs.forEach(function (g) {
       var runners = perRunner ? (g.runners || []) : [];
       if (runners.length) {
@@ -187,13 +197,68 @@
     }).catch(function (e) { message(e.message); });
   }
 
+  // Which training group this reader follows. The link's own ?g= wins; otherwise the last one
+  // picked on this device for this team's link. A group that no longer exists falls back to all.
+  var PICK_KEY = "ts.group." + token;
+  var picked = params.get("g") || (function () { try { return localStorage.getItem(PICK_KEY) || ""; } catch (e) { return ""; } })();
+  var lastData = null;
+  function choose(id) {
+    picked = id;
+    try { if (id) localStorage.setItem(PICK_KEY, id); else localStorage.removeItem(PICK_KEY); } catch (e) {}
+    var u = new URL(location.href);
+    if (id) u.searchParams.set("g", id); else u.searchParams.delete("g");
+    history.replaceState(null, "", u);
+    if (lastData) render(lastData);
+  }
+  function groupCard(g, lead) {
+    var card = el("div", "group" + (lead ? " lead" : ""));
+    card.style.borderLeftColor = COLORS[g.color] || COLORS.gray;
+    card.appendChild(el("b", null, g.name));
+    card.appendChild(el("small", null, [g.guild, g.size + (g.size === 1 ? " athlete" : " athletes")].filter(Boolean).join(" · ")));
+    if (g.mid != null) {
+      var ez = zone("E", Number(g.mid));
+      var p = el("div", "pace", "Easy runs ");
+      p.appendChild(el("b", null, range(ez, MILE) + "/mi"));
+      card.appendChild(p);
+    }
+    if ((g.athletes || []).length) {
+      var ul = el("ul");
+      g.athletes.forEach(function (n) { ul.appendChild(el("li", null, n)); });
+      card.appendChild(ul);
+    }
+    return card;
+  }
+
   function render(data) {
+    lastData = data;
     app.textContent = "";
     document.title = data.team + " · schedule";
     var groupsById = {};
     (data.groups || []).forEach(function (g) { groupsById[g.id] = g; });
+    var only = groupsById[picked] ? picked : "";
+    var sel = only ? groupsById[only] : null;
 
     app.appendChild(el("span", "team", data.team));
+
+    // The page leads with the training groups: pick one to see only its week.
+    if ((data.groups || []).length > 1) {
+      var pick = el("div", "pick");
+      pick.appendChild(el("div", "lbl", "Training group"));
+      var chips = el("div", "chips");
+      var all = [{ id:"", name:"All groups", color:"gray" }].concat(data.groups);
+      all.forEach(function (g) {
+        var c = el("button", "chip" + (g.id === only ? " on" : ""), g.name);
+        var col = g.id ? (COLORS[g.color] || COLORS.gray) : COLORS.lane;
+        c.style.borderColor = col;
+        if (g.id === only) c.style.background = col; else if (g.id) c.style.color = col;
+        c.setAttribute("aria-pressed", g.id === only ? "true" : "false");
+        c.onclick = function () { choose(g.id); };
+        chips.appendChild(c);
+        if (g.id === only) setTimeout(function () { c.scrollIntoView({ inline:"center", block:"nearest" }); }, 0);
+      });
+      pick.appendChild(chips);
+      app.appendChild(pick);
+    }
     app.appendChild(el("h1", null, "Week of " + fmt(data.week, { month:"long", day:"numeric" })));
 
     var nav = el("div", "nav");
@@ -210,7 +275,8 @@
     app.appendChild(nav);
 
     var today = iso(new Date());
-    app.appendChild(el("h2", null, "Workouts"));
+    if (sel) app.appendChild(groupCard(sel, true));
+    app.appendChild(el("h2", null, sel ? sel.name + " workouts" : "Workouts"));
     for (var i = 0; i < 7; i++) {
       var day = addDays(data.week, i);
       var box = el("section", "day" + (day === today ? " today" : ""));
@@ -218,24 +284,26 @@
       (data.meets || []).filter(function (m) { return m.day === day; }).forEach(function (m) {
         box.appendChild(el("div", "meet", "Meet: " + m.name + (m.location ? " · " + m.location : "")));
       });
-      var ws = (data.workouts || []).filter(function (w) { return w.day === day; });
+      var ws = (data.workouts || []).filter(function (w) {
+        return w.day === day && (!only || (w.groups || []).some(function (wg) { return wg.id === only; }));
+      });
       ws.forEach(function (w) {
         var item = el("div", "w");
         item.appendChild(el("b", null, w.title));
         if (w.body) item.appendChild(el("p", null, w.body));
         var tags = el("div", "tags");
-        (w.groups || []).forEach(function (wg) {
+        if (!only) (w.groups || []).forEach(function (wg) {
           var g = groupsById[wg.id]; if (!g) return;
           var t = el("span", "tag", g.name);
           t.style.color = t.style.borderColor = COLORS[g.color] || COLORS.gray;
           tags.appendChild(t);
         });
         if (tags.childNodes.length) item.appendChild(tags);
-        var t = targets(w, groupsById);
+        var t = targets(w, groupsById, only);
         if (t) item.appendChild(t);
         (w.groups || []).forEach(function (wg) {
           var g = groupsById[wg.id];
-          if (g && wg.note) item.appendChild(el("div", "note", g.name + ": " + wg.note));
+          if (g && wg.note && (!only || g.id === only)) item.appendChild(el("div", "note", only ? wg.note : g.name + ": " + wg.note));
         });
         box.appendChild(item);
       });
@@ -243,27 +311,10 @@
       app.appendChild(box);
     }
 
-    if ((data.groups || []).length) {
+    if (!sel && (data.groups || []).length) {
       app.appendChild(el("h2", null, "Training groups"));
       var grid = el("div", "groups");
-      data.groups.forEach(function (g) {
-        var card = el("div", "group");
-        card.style.borderLeftColor = COLORS[g.color] || COLORS.gray;
-        card.appendChild(el("b", null, g.name));
-        card.appendChild(el("small", null, [g.guild, g.size + (g.size === 1 ? " athlete" : " athletes")].filter(Boolean).join(" · ")));
-        if (g.mid != null) {
-          var ez = zone("E", Number(g.mid));
-          var p = el("div", "pace", "Easy runs ");
-          p.appendChild(el("b", null, range(ez, MILE) + "/mi"));
-          card.appendChild(p);
-        }
-        if ((g.athletes || []).length) {
-          var ul = el("ul");
-          g.athletes.forEach(function (n) { ul.appendChild(el("li", null, n)); });
-          card.appendChild(ul);
-        }
-        grid.appendChild(card);
-      });
+      data.groups.forEach(function (g) { grid.appendChild(groupCard(g, false)); });
       app.appendChild(grid);
     }
     app.appendChild(el("footer", null, "Shared by your coaches with Team Spike."));
