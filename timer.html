@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Workout timer</title>
+<!--
+  A Team Spike coach shares this by link with an adult helper (a parent, an assistant) to time one
+  workout for one group. The page holds no team data: it reads the workout, the reps and the
+  athletes (first name and last initial) from the helper-timer function with the link's token
+  (?t=...) and sends back only times. Nothing is kept in this browser: unsent times live in the
+  page's memory and are retried until saved. Everything is drawn with textContent.
+-->
+<style>
+  :root { --ground:#0A0A0A; --surface:#161616; --ink:#F5F5F5; --quiet:#9A9A9A; --line:#2A2A2A; --lane:#FF4D00; --good:#39FF6A; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--ground); color:var(--ink); font:16px/1.4 -apple-system, system-ui, sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:16px 16px 60px; }
+  .team { display:inline-block; background:var(--lane); color:#000; font-weight:800; letter-spacing:.04em;
+          text-transform:uppercase; font-size:12px; padding:4px 12px; transform:skewX(-10deg); }
+  h1 { font-size:26px; line-height:1.1; margin:10px 0 2px; font-style:italic; font-weight:900; text-transform:uppercase; }
+  .sub { color:var(--quiet); font-size:14px; }
+  .clockbox { position:sticky; top:0; z-index:5; background:var(--ground); padding:12px 0; margin-top:10px; border-bottom:1px solid var(--line); }
+  .rep { font-size:14px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--lane); }
+  .clock { font:800 56px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing:-.02em; }
+  .clock.rest { color:var(--quiet); }
+  .bar { display:flex; gap:8px; margin-top:6px; }
+  button { font:700 16px system-ui; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink);
+           min-height:48px; padding:0 16px; }
+  button.go { background:var(--lane); color:#000; border:0; flex:1; }
+  button:disabled { opacity:.35; }
+  .grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-top:12px; }
+  .ath { min-height:64px; text-align:left; display:flex; flex-direction:column; justify-content:center; }
+  .ath small { color:var(--quiet); font:600 13px ui-monospace, Menlo, monospace; margin-top:2px; }
+  .ath.done { border-color:var(--good); }
+  .ath.done small { color:var(--good); }
+  h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--quiet); margin:26px 0 8px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { padding:6px 4px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  th:first-child, td:first-child { text-align:left; }
+  td { font-family:ui-monospace, Menlo, monospace; }
+  td:first-child { font-family:inherit; }
+  .scroll { overflow-x:auto; }
+  .status { font-size:13px; color:var(--quiet); margin-top:6px; min-height:18px; }
+  .status.warn { color:var(--lane); }
+  .msg { color:var(--quiet); padding:40px 0; text-align:center; }
+  .how { color:var(--quiet); font-size:14px; margin-top:8px; }
+</style>
+</head>
+<body>
+<main id="app"><p class="msg">Loading…</p></main>
+<script>
+(function () {
+  "use strict";
+  var API = "https://lluwkizjktpnezxmcsys.supabase.co/functions/v1/helper-timer";
+  var token = new URLSearchParams(location.search).get("t") || "";
+  var app = document.getElementById("app");
+  var data = null;        // the workout, reps and athletes
+  var reps = [];          // [{label, rest: {sec|label}}] in the order they're run
+  var times = {};         // athlete id -> {rep -> seconds}
+  var queue = [];         // times not yet saved
+  var repIndex = 0;       // 0-based rep being run
+  var startedAt = null;   // when the current rep started (ms), null while waiting
+  var restUntil = null;   // when the recovery ends (ms), if it's a timed one
+  var sending = false;
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function clock(sec) {
+    if (!(sec >= 0)) return "–";
+    var m = Math.floor(sec / 60), s = sec - m * 60;
+    var ss = s.toFixed(1);
+    if (s < 10) ss = "0" + ss;
+    return m > 0 ? m + ":" + ss : s.toFixed(1);
+  }
+  function lengthLabel(x) {
+    if (!x) return "";
+    if (x.m != null) return x.m + "m";
+    if (x.mi != null) return x.mi + " mi";
+    if (x.min != null) return x.min + " min";
+    if (x.s != null) return x.s < 60 ? x.s + "s" : Math.floor(x.s / 60) + ":" + String(x.s % 60).padStart(2, "0");
+    return "";
+  }
+  function restSeconds(r) {
+    if (!r) return null;
+    if (r.s != null) return r.s;
+    if (r.min != null) return r.min * 60;
+    return null;
+  }
+  // The same order as the app's WorkoutPlan.repsInOrder.
+  function repsOf(structure) {
+    var out = [];
+    var sets = (structure && structure.sets) || [];
+    sets.forEach(function (b, bi) {
+      var repeat = Math.max(1, b.repeat || 1);
+      for (var k = 0; k < repeat; k++) {
+        (b.reps || []).forEach(function (r, ri) {
+          var n = Math.max(1, r.count || 1);
+          for (var j = 0; j < n; j++) {
+            var last = j === n - 1 && ri === (b.reps.length - 1);
+            var rest = last && k < repeat - 1 && b.rest ? b.rest : r.rest;
+            out.push({ label: lengthLabel(r) + (r.zone ? " @" + r.zone : ""), rest: rest || null });
+          }
+        });
+      }
+    });
+    return out;
+  }
+
+  function load() {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return fail("This timing link isn't complete. Ask the coach for it again.");
+    fetch(API + "?t=" + encodeURIComponent(token)).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+    }).then(function (x) {
+      if (!x.ok) return fail(x.j.error || "This timing link has ended.");
+      data = x.j;
+      reps = repsOf(data.structure);
+      if (!reps.length) reps = [{ label: "Rep", rest: null }];
+      (data.splits || []).forEach(function (s) {
+        (times[s.athlete_id] = times[s.athlete_id] || {})[s.rep] = Number(s.seconds);
+      });
+      // Pick up where the times so far leave off.
+      var most = 0;
+      Object.keys(times).forEach(function (a) { Object.keys(times[a]).forEach(function (k) { most = Math.max(most, +k); }); });
+      repIndex = Math.min(reps.length - 1, most);
+      draw();
+    }).catch(function () { fail("The workout couldn't be loaded. Check the connection and reload."); });
+  }
+  function fail(text) { app.textContent = ""; app.appendChild(el("p", "msg", text)); }
+
+  function elapsed() { return startedAt ? (Date.now() - startedAt) / 1000 : 0; }
+
+  function startRep() {
+    startedAt = Date.now();
+    restUntil = null;
+    draw();
+  }
+  function tap(id) {
+    if (!startedAt) return;
+    var rep = repIndex + 1;
+    var sec = Math.round(elapsed() * 100) / 100;
+    (times[id] = times[id] || {})[rep] = sec;
+    queue.push({ athlete_id: id, rep: rep, seconds: sec });
+    if (navigator.vibrate) navigator.vibrate(15);
+    // Everyone in: the rep is over, the recovery begins.
+    if (data.athletes.every(function (a) { return times[a.id] && times[a.id][rep] != null; })) endRep();
+    else draw();
+    send();
+  }
+  function endRep() {
+    var r = reps[repIndex];
+    startedAt = null;
+    var rs = restSeconds(r && r.rest);
+    restUntil = rs ? Date.now() + rs * 1000 : null;
+    if (repIndex < reps.length - 1) repIndex++;
+    draw();
+  }
+  function send() {
+    if (sending || !queue.length) return;
+    sending = true;
+    var batch = queue.slice(0, 100);
+    fetch(API + "?t=" + encodeURIComponent(token), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ splits: batch })
+    }).then(function (r) {
+      if (r.status === 404) { queue = []; return fail("This timing link has ended. Times already saved are kept."); }
+      if (!r.ok) throw new Error("save");
+      queue = queue.slice(batch.length);
+    }).catch(function () {}).then(function () {
+      sending = false;
+      status();
+      if (queue.length) setTimeout(send, 4000);
+    });
+  }
+  function status() {
+    var s = document.getElementById("status");
+    if (!s) return;
+    s.className = "status" + (queue.length ? " warn" : "");
+    s.textContent = queue.length ? queue.length + " time" + (queue.length === 1 ? "" : "s") + " waiting to save. Keep this page open." : "All times saved.";
+  }
+
+  function draw() {
+    app.textContent = "";
+    app.appendChild(el("span", "team", data.team || "Team"));
+    app.appendChild(el("h1", null, data.title));
+    app.appendChild(el("div", "sub", [data.group, new Date(data.day + "T12:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }),
+      "timing for " + data.helper].filter(Boolean).join(" · ")));
+
+    var box = el("div", "clockbox");
+    var r = reps[repIndex];
+    box.appendChild(el("div", "rep", "Rep " + (repIndex + 1) + " of " + reps.length + " · " + r.label));
+    var c = el("div", "clock");
+    c.id = "clock";
+    box.appendChild(c);
+    var bar = el("div", "bar");
+    var go = el("button", "go", startedAt ? "Everyone else is in" : "Start rep " + (repIndex + 1));
+    go.onclick = function () { startedAt ? endRep() : startRep(); };
+    bar.appendChild(go);
+    var back = el("button", null, "Back a rep");
+    back.disabled = repIndex === 0 || !!startedAt;
+    back.onclick = function () { repIndex = Math.max(0, repIndex - 1); restUntil = null; draw(); };
+    bar.appendChild(back);
+    box.appendChild(bar);
+    var st = el("div", "status");
+    st.id = "status";
+    box.appendChild(st);
+    app.appendChild(box);
+
+    if (!startedAt) app.appendChild(el("p", "how", "Tap Start as the rep begins, then each runner's name as they finish."));
+    var grid = el("div", "grid");
+    data.athletes.forEach(function (a) {
+      var t = times[a.id] && times[a.id][repIndex + 1];
+      var b = el("button", "ath" + (t != null ? " done" : ""));
+      b.appendChild(el("span", null, a.name));
+      b.appendChild(el("small", null, t != null ? clock(t) : " "));
+      b.disabled = !startedAt;
+      b.onclick = function () { tap(a.id); };
+      grid.appendChild(b);
+    });
+    app.appendChild(grid);
+
+    app.appendChild(el("h2", null, "Times so far"));
+    var wrap = el("div", "scroll");
+    var table = el("table");
+    var head = el("tr");
+    head.appendChild(el("th", null, ""));
+    for (var i = 1; i <= reps.length; i++) head.appendChild(el("th", null, String(i)));
+    table.appendChild(head);
+    data.athletes.forEach(function (a) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, a.name));
+      for (var i = 1; i <= reps.length; i++) tr.appendChild(el("td", null, times[a.id] && times[a.id][i] != null ? clock(times[a.id][i]) : ""));
+      table.appendChild(tr);
+    });
+    wrap.appendChild(table);
+    app.appendChild(wrap);
+    status();
+    tick();
+  }
+  function tick() {
+    var c = document.getElementById("clock");
+    if (!c) return;
+    if (startedAt) { c.className = "clock"; c.textContent = clock(elapsed()); }
+    else if (restUntil && restUntil > Date.now()) { c.className = "clock rest"; c.textContent = "Rest " + clock((restUntil - Date.now()) / 1000); }
+    else { c.className = "clock rest"; c.textContent = "0.0"; }
+  }
+  setInterval(tick, 100);
+  window.addEventListener("beforeunload", function (e) { if (queue.length) { e.preventDefault(); e.returnValue = ""; } });
+  load();
+})();
+</script>
+</body>
+</html>
