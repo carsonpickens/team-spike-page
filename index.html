@@ -60,6 +60,13 @@
           color:var(--ink); font:700 15px system-ui; white-space:nowrap; }
   .chip.on { color:#000; }
   .group.lead { margin-top:16px; }
+  .plan { margin-top:10px; display:grid; gap:6px; }
+  .plan .pr { display:grid; grid-template-columns:88px 1fr; gap:10px; align-items:baseline; }
+  .plan .pl { color:var(--quiet); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+  .plan .main { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:6px 0; }
+  .plan .ln { font-size:14px; }
+  .plan .ln b { display:inline; font:700 15px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .plan .ln span { color:var(--quiet); font-size:13px; margin-left:8px; }
   .msg { color:var(--quiet); padding:40px 0; text-align:center; }
   footer { color:var(--quiet); font-size:12px; margin-top:36px; text-align:center; }
 </style>
@@ -180,6 +187,59 @@
     return box;
   }
 
+  // A workout's structure, laid out as the app lays it out: warm-up, the main set, cool-down.
+  function lengthLabel(x) {
+    if (!x) return "";
+    function num(n) { return Math.round(n) === n ? String(n) : String(Math.round(n * 100) / 100); }
+    if (x.m != null) return x.m + "m";
+    if (x.mi != null) return num(x.mi) + " mi";
+    if (x.min != null) return num(x.min) + " min";
+    if (x.s != null) return x.s < 60 ? x.s + "s" : Math.floor(x.s / 60) + ":" + String(x.s % 60).padStart(2, "0");
+    return "";
+  }
+  function restLabel(r) {
+    if (!r) return null;
+    var l = lengthLabel(r);
+    return l ? (r.how === "stand" ? l + " rest" : l + " " + (r.how || "jog")) : null;
+  }
+  function plan(st) {
+    if (!st || (!st.warmup && !(st.sets || []).length && !st.cooldown)) return null;
+    var box = el("div", "plan");
+    function line(main, detail) {
+      var d = el("div", "ln");
+      d.appendChild(el("b", null, main));
+      if (detail) d.appendChild(el("span", null, detail));
+      return d;
+    }
+    function prow(label, lines, cls) {
+      var r = el("div", "pr" + (cls ? " " + cls : ""));
+      r.appendChild(el("div", "pl", label));
+      var col = el("div");
+      lines.forEach(function (l) { col.appendChild(l); });
+      r.appendChild(col);
+      return r;
+    }
+    function seg(x) { return line(lengthLabel(x), x.zone ? ZONES[x.zone].toLowerCase() : null); }
+    if (st.warmup) box.appendChild(prow("Warm-up", [seg(st.warmup)]));
+    if ((st.sets || []).length) {
+      var main = el("div", "main");
+      st.sets.forEach(function (b, i) {
+        var rep = b.repeat || 1, lines = [];
+        if (rep > 1) lines.push(line(rep + " sets of", null));
+        (b.reps || []).forEach(function (r) {
+          var n = r.count || 1;
+          var detail = [r.zone ? ZONES[r.zone] : null, restLabel(r.rest)].filter(Boolean).join(" · ");
+          lines.push(line((n > 1 ? n + " × " : "") + lengthLabel(r), detail || null));
+        });
+        if (rep > 1 && b.rest) lines.push(line(restLabel(b.rest) + " between sets", null));
+        main.appendChild(prow(i === 0 ? "Main set" : "", lines));
+      });
+      box.appendChild(main);
+    }
+    if (st.cooldown) box.appendChild(prow("Cool-down", [seg(st.cooldown)]));
+    return box;
+  }
+
   function message(text) { app.textContent = ""; app.appendChild(el("p", "msg", text)); }
 
   function load(week) {
@@ -291,6 +351,8 @@
         var item = el("div", "w");
         item.appendChild(el("b", null, w.title));
         if (w.body) item.appendChild(el("p", null, w.body));
+        var pl = plan(w.structure);
+        if (pl) item.appendChild(pl);
         var tags = el("div", "tags");
         if (!only) (w.groups || []).forEach(function (wg) {
           var g = groupsById[wg.id]; if (!g) return;
