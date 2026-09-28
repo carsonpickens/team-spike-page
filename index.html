@@ -48,6 +48,17 @@
   .tgt .row .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .tgt .row .pc { font:700 14px ui-monospace, SFMono-Regular, Menlo, monospace; white-space:nowrap; }
   .tgt .row .sub { color:var(--quiet); font-size:12px; white-space:nowrap; }
+  .pg { overflow-x:auto; margin-top:6px; }
+  .pg table { border-collapse:collapse; width:100%; font-size:14px; }
+  .pg th { color:var(--quiet); font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+           text-align:right; padding:4px 0 2px 10px; white-space:nowrap; vertical-align:bottom; }
+  .pg th:first-child, .pg td:first-child { text-align:left; padding-left:0; }
+  .pg th small { display:block; font-size:10px; letter-spacing:.04em; opacity:.8; }
+  .pg td { padding:4px 0 4px 10px; text-align:right; white-space:nowrap;
+           font:700 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pg td:first-child { font:400 14px system-ui; max-width:7.5em; overflow:hidden; text-overflow:ellipsis; }
+  .pg tr.gr td { color:var(--quiet); font:800 11px system-ui; letter-spacing:.08em; text-transform:uppercase; padding-top:8px; }
+  .pg tr:first-child + tr.gr td { padding-top:4px; }
   .tgt .gh { color:var(--quiet); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; margin-top:8px; }
   .group .pace { color:var(--quiet); font-size:13px; margin-top:6px; }
   .group .pace b { color:var(--ink); font:700 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -153,9 +164,76 @@
     return r;
   }
 
+  // Every pace a workout's main set asks for, one column each: a zone and the length it is run
+  // over (8 × 1000m at threshold and 4 × 200m at repetition make two columns). Reps timed by
+  // the clock have no rep time, so they read as a pace per mile.
+  function paceColumns(st) {
+    var cols = [], seen = {};
+    ((st && st.sets) || []).forEach(function (b) {
+      (b.reps || []).forEach(function (r) {
+        if (!r.zone || !ZONES[r.zone]) return;
+        var c;
+        if (r.m != null) c = { zone:r.zone, meters:repMeters(r.m), label:"per " + repLabel(r.m), tenths:r.m <= 300 };
+        else if (r.mi != null) c = { zone:r.zone, meters:r.mi * MILE, label:"per " + (r.mi === 1 ? "mile" : milesLabel(r.mi)) };
+        else c = { zone:r.zone, meters:MILE, label:"per mile" };
+        var key = c.zone + "|" + c.meters;
+        if (seen[key]) return;
+        seen[key] = true;
+        cols.push(c);
+      });
+    });
+    return cols;
+  }
+  // The grid: a row per athlete (or per group, when the coach keeps runners' paces off the page),
+  // a column per pace, grouped under each training group's name.
+  function paceGrid(w, cols, groupsById, only) {
+    var miles = w.miles != null ? Number(w.miles) : null;
+    var box = el("div", "tgt");
+    box.appendChild(el("div", "hd", [miles ? milesLabel(miles) : null, cols.length > 1 ? "Paces" : ZONES[cols[0].zone] + " pace"]
+      .filter(Boolean).join(" · ")));
+    var wrap = el("div", "pg"), table = el("table"), head = el("tr");
+    head.appendChild(el("th", null, ""));
+    cols.forEach(function (c) {
+      var th = el("th", null, ZONES[c.zone]);
+      th.appendChild(el("small", null, c.label));
+      head.appendChild(th);
+    });
+    table.appendChild(head);
+    function line(name, score) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, name));
+      cols.forEach(function (c) {
+        var z = zone(c.zone, score);
+        tr.appendChild(el("td", null, z ? range(z, c.meters, c.tenths) : "–"));
+      });
+      table.appendChild(tr);
+    }
+    var gs = (w.groups || []).map(function (wg) { return groupsById[wg.id]; })
+      .filter(function (g) { return g && (!only || g.id === only); });
+    var rows = 0;
+    gs.forEach(function (g) {
+      var runners = g.runners || [];
+      if (runners.length) {
+        if (gs.length > 1) {
+          var gr = el("tr", "gr"), td = el("td", null, g.name);
+          td.colSpan = cols.length + 1;
+          gr.appendChild(td);
+          table.appendChild(gr);
+        }
+        runners.forEach(function (r) { line(r.n, Number(r.s)); rows++; });
+      } else if (g.mid != null) { line(g.name, Number(g.mid)); rows++; }
+    });
+    if (!rows) return null;
+    wrap.appendChild(table);
+    box.appendChild(wrap);
+    return box;
+  }
+
   // A workout's targets: easy-type runs at each group's midpoint pace; a workout at each
   // runner's own pace (or the group's, when the coach keeps runners' paces off the page).
   function targets(w, groupsById, only) {
+    var cols = paceColumns(w.structure);
+    if (cols.length) { var grid = paceGrid(w, cols, groupsById, only); if (grid) return grid; }
     var miles = w.miles != null ? Number(w.miles) : null;
     if (!w.zone && !miles) return null;
     var perRunner = w.kind ? w.kind === "workout" : ["T", "I", "R"].indexOf(w.zone) >= 0;
