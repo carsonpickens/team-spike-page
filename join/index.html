@@ -9,8 +9,8 @@
 <meta property="og:title" content="Team Spike · the running coach's app">
 <meta property="og:description" content="Voice roll call, workouts with every athlete's paces, results and PRs, and a scouting report for your next meet. Ask for the beta.">
 <!--
-  The Team Spike landing page. The phone mock uses made-up names: never a real athlete here. The form posts to the testflight-invite function, which adds the
-  person to the app's external TestFlight group; Apple emails the invite. This page holds no data.
+  The Team Spike landing page. The phone mock uses made-up names: never a real athlete here. The form posts to the testflight-invite function, which keeps the
+  request until the owner approves it in the app; then the person joins the external TestFlight group and Apple emails the invite. This page holds no data.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -162,7 +162,7 @@
         <p class="lead" style="margin-bottom:8px">The beta is free and runs through Apple's TestFlight app.</p>
         <ol class="steps">
           <li>Enter your name and the email you use for your Apple Account.</li>
-          <li>Apple emails you an invitation from TestFlight. It can take a little while, and new builds are checked by Apple before they go out.</li>
+          <li>We look over each request. Once it's approved, Apple emails you an invitation from TestFlight (new builds are also checked by Apple before they go out).</li>
           <li>Install TestFlight from the App Store, open the invite on your iPhone, and tap Install.</li>
           <li>Sign in with Apple and set up your team in a couple of minutes, or try the demo team first.</li>
         </ol>
@@ -214,7 +214,7 @@
         if (res.ok) {
           say(res.j.already
             ? "You're already on the list. Look for an email from TestFlight (check spam), then open it on your iPhone."
-            : "You're in. Apple will email " + body.email + " an invitation from TestFlight. Open it on your iPhone to install Team Spike.", true);
+            : "Thanks, we've got your request. Once it's approved, Apple will email " + body.email + " an invitation from TestFlight. Open it on your iPhone to install Team Spike.", true);
           form.reset();
         } else {
           say(res.j.error || "Something went wrong. Try again in a minute.", false);
