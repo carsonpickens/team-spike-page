@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Team Spike · the running coach's app · Get the beta</title>
+<meta name="description" content="Team Spike is an iPhone app for high school cross country and track coaches: voice roll call, workouts with every athlete's paces, results and PRs, and a scouting report for your next meet. Ask for the TestFlight beta.">
+<meta property="og:title" content="Team Spike · the running coach's app">
+<meta property="og:description" content="Voice roll call, workouts with every athlete's paces, results and PRs, and a scouting report for your next meet. Ask for the beta.">
+<!--
+  The Team Spike landing page. The phone mock uses made-up names: never a real athlete here. The form posts to the testflight-invite function, which adds the
+  person to the app's external TestFlight group; Apple emails the invite. This page holds no data.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:ital,wght@0,500;0,700;1,900&family=JetBrains+Mono:wght@500;800&display=swap" rel="stylesheet">
+<style>
+  :root { --ground:#0A0A0A; --surface:#161616; --raised:#1F1F1F; --ink:#F5F5F5; --quiet:#9A9A9A; --line:#2A2A2A;
+          --lane:#FF4D00; --good:#39FF6A; --amber:#FFB000; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--ground); color:var(--ink); font:17px/1.5 Archivo, -apple-system, system-ui, sans-serif; }
+  a { color:var(--lane); }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 20px; }
+  .display { font-family:Anton, Impact, sans-serif; text-transform:uppercase; letter-spacing:.01em; line-height:.95; }
+  .label { font:italic 900 13px Archivo, sans-serif; letter-spacing:.12em; text-transform:uppercase; }
+  .mono { font-family:"JetBrains Mono", ui-monospace, Menlo, monospace; }
+
+  header { padding:18px 0; display:flex; align-items:center; justify-content:space-between; }
+  .brand { display:inline-block; background:var(--lane); color:#000; padding:6px 16px; transform:skewX(-10deg);
+           font-family:Anton, Impact, sans-serif; font-size:20px; letter-spacing:.04em; text-transform:uppercase; text-decoration:none; }
+  .brand span { display:inline-block; transform:skewX(10deg); }
+  .cta { display:inline-block; background:var(--lane); color:#000; font:800 16px Archivo, sans-serif; text-decoration:none;
+         padding:14px 22px; border-radius:12px; border:0; cursor:pointer; }
+  .cta.small { padding:10px 16px; font-size:14px; }
+
+  .hero { display:grid; grid-template-columns:1.2fr .8fr; gap:40px; align-items:center; padding:40px 0 64px; }
+  .hero h1 { font-size:clamp(52px, 9vw, 104px); margin:18px 0 18px; }
+  .hero h1 em { color:var(--lane); font-style:normal; }
+  .hero p { font-size:20px; color:#D8D8D8; max-width:560px; margin:0 0 28px; }
+  .chip { display:inline-block; border:1.5px solid var(--lane); color:var(--lane); border-radius:99px; padding:4px 12px; }
+
+  /* A phone showing a slice of the scouting report. */
+  .phone { justify-self:center; width:300px; border-radius:44px; background:#000; border:10px solid #1C1C1C;
+           box-shadow:0 30px 80px rgba(255,77,0,.18); padding:22px 16px 26px; }
+  .phone .t { font-family:Anton, sans-serif; font-size:22px; text-transform:uppercase; margin:6px 0 12px; }
+  .proj { background:var(--surface); border-radius:16px; padding:14px; }
+  .proj .score { font-family:Anton, sans-serif; font-size:48px; color:var(--lane); line-height:1; transform:skewX(-8deg); display:inline-block; }
+  .rung { display:flex; gap:10px; align-items:baseline; padding:7px 10px; font-size:14px; border-left:3px solid transparent; }
+  .rung.us { background:rgba(255,77,0,.13); border-left-color:var(--lane); color:var(--lane); font-weight:700; }
+  .rung .pl { width:18px; color:var(--quiet); font-family:"JetBrains Mono", monospace; font-size:12px; }
+  .rung .tm { margin-left:auto; font-family:"JetBrains Mono", monospace; color:var(--ink); }
+
+  section { padding:56px 0; border-top:1px solid var(--line); }
+  h2 { font-size:clamp(36px, 6vw, 60px); margin:10px 0 16px; }
+  .lead { color:#CFCFCF; font-size:19px; max-width:680px; margin:0 0 32px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+  .card { background:var(--surface); border-radius:18px; padding:22px; }
+  .card h3 { font-family:Anton, sans-serif; font-size:26px; text-transform:uppercase; margin:10px 0 8px; letter-spacing:.01em; }
+  .card p { color:#C9C9C9; margin:0; font-size:16px; }
+  .card .k { color:var(--lane); }
+  .ico { width:42px; height:42px; border-radius:12px; background:rgba(255,77,0,.14); display:grid; place-items:center; font-size:22px; }
+
+  .privacy { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px; }
+  .privacy div { border:1px solid var(--line); border-radius:14px; padding:16px; color:#CFCFCF; font-size:15px; }
+  .privacy b { display:block; color:var(--ink); margin-bottom:4px; }
+
+  .ask { display:grid; grid-template-columns:.9fr 1.1fr; gap:36px; align-items:start; }
+  .steps { list-style:none; padding:0; margin:18px 0 0; counter-reset:s; }
+  .steps li { position:relative; padding:0 0 16px 44px; color:#CFCFCF; }
+  .steps li::before { counter-increment:s; content:counter(s); position:absolute; left:0; top:-2px; width:30px; height:30px;
+                      border-radius:50%; background:var(--raised); color:var(--lane); display:grid; place-items:center;
+                      font:800 14px "JetBrains Mono", monospace; }
+  form { background:var(--surface); border-radius:20px; padding:24px; display:grid; gap:14px; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  label { display:grid; gap:6px; font-size:13px; color:var(--quiet); font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+  input, select { background:var(--ground); color:var(--ink); border:1.5px solid var(--line); border-radius:12px;
+                  font:500 17px Archivo, system-ui, sans-serif; padding:13px 14px; width:100%; }
+  input:focus, select:focus { outline:none; border-color:var(--lane); }
+  .hp { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  .fine { color:var(--quiet); font-size:13px; margin:0; }
+  .msg { border-radius:12px; padding:14px 16px; font-size:15px; display:none; }
+  .msg.ok { display:block; background:rgba(57,255,106,.1); color:var(--good); border:1px solid rgba(57,255,106,.35); }
+  .msg.err { display:block; background:rgba(255,176,0,.1); color:var(--amber); border:1px solid rgba(255,176,0,.35); }
+  footer { color:var(--quiet); font-size:13px; padding:36px 0 48px; border-top:1px solid var(--line); }
+
+  @media (max-width: 820px) {
+    .hero, .ask { grid-template-columns:1fr; }
+    .phone { width:270px; }
+    .two { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="#"><span>Team Spike</span></a>
+    <a class="cta small" href="#ask">Get the beta</a>
+  </header>
+
+  <div class="hero">
+    <div>
+      <span class="label chip">iPhone · Free beta on TestFlight</span>
+      <h1 class="display">Coach the team,<br><em>not the clipboard.</em></h1>
+      <p>Team Spike is the app for high school cross country and track coaches. Take roll call by voice, send every athlete their own paces, keep results and PRs in one place, and walk into every meet with a scouting report.</p>
+      <a class="cta" href="#ask">Request TestFlight access</a>
+    </div>
+    <div class="phone" aria-hidden="true">
+      <div class="label" style="color:var(--quiet);font-size:11px">Next meet</div>
+      <div class="t">Riverside @ Hillview</div>
+      <div class="proj">
+        <div class="label" style="color:var(--quiet);font-size:11px">Projected</div>
+        <span class="score">W 24–31</span>
+        <div style="margin-top:12px">
+          <div class="rung"><span class="pl">1</span>A. Runner · HIL<span class="tm">15:38</span></div>
+          <div class="rung us"><span class="pl">2</span>J. Alvarez<span class="tm">16:03</span></div>
+          <div class="rung us"><span class="pl">3</span>M. Chen<span class="tm">16:04</span></div>
+          <div class="rung"><span class="pl">4</span>T. Brooks · HIL<span class="tm">16:31</span></div>
+          <div class="rung us"><span class="pl">5</span>S. Patel<span class="tm">16:52</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="features">
+    <span class="label" style="color:var(--lane)">What it does</span>
+    <h2 class="display">Everything a practice needs</h2>
+    <p class="lead">Built with a Massachusetts high school team and used at practice every day. One app for the four jobs every running coach does by hand.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">🎙️</div><h3>Voice roll call</h3>
+        <p>Hold the button and read names off. Team Spike checks athletes off as you say them, handles nicknames and "Last, First", and flags anyone it isn't sure about. <span class="k">Speech is recognized on the iPhone and never sent anywhere.</span></p></div>
+      <div class="card"><div class="ico">⏱️</div><h3>Workouts with everyone's paces</h3>
+        <p>Build the session once: warm-up, main set, cool-down. Every athlete gets their own threshold, interval and rep paces from their race times, in a grid by training group.</p></div>
+      <div class="card"><div class="ico">📅</div><h3>Plan the week</h3>
+        <p>Lay out the week around your meets, with a suggested shape for hard and easy days. Share it with athletes and parents on a public page, no accounts needed.</p></div>
+      <div class="card"><div class="ico">🏁</div><h3>Results and PRs</h3>
+        <p>Finds your meets' results on Athletic.net, or reads a photo or PDF of the results sheet. PRs, fitness scores and leaderboards by event, kept up to date for you.</p></div>
+      <div class="card"><div class="ico">🔭</div><h3>Scout the next meet</h3>
+        <p>Who's racing, their best runners, and your projected score before the gun. A projected finish, athlete by athlete, and who each of your runners should key off.</p></div>
+      <div class="card"><div class="ico">👥</div><h3>Groups and live timing</h3>
+        <p>Suggested training groups from real marks. Time reps live, or hand an assistant a link to time their group from their own phone.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="label" style="color:var(--lane)">Made for minors' data</span>
+    <h2 class="display">Private by design</h2>
+    <div class="privacy">
+      <div><b>Only your coaches</b>Athlete data is visible only to the coaches of that team. Every table is locked down row by row.</div>
+      <div><b>Voice stays on the phone</b>Audio and transcripts are never saved, logged or uploaded.</div>
+      <div><b>No photos of athletes</b>Team Spike never captures faces or images of athletes.</div>
+      <div><b>Public page on your terms</b>The shared schedule shows first names and last initials, or no names. Turn it off anytime.</div>
+    </div>
+  </section>
+
+  <section id="ask">
+    <div class="ask">
+      <div>
+        <span class="label" style="color:var(--lane)">Join the beta</span>
+        <h2 class="display">Get Team Spike on your iPhone</h2>
+        <p class="lead" style="margin-bottom:8px">The beta is free and runs through Apple's TestFlight app.</p>
+        <ol class="steps">
+          <li>Enter your name and the email you use for your Apple Account.</li>
+          <li>Apple emails you an invitation from TestFlight. It can take a little while, and new builds are checked by Apple before they go out.</li>
+          <li>Install TestFlight from the App Store, open the invite on your iPhone, and tap Install.</li>
+          <li>Sign in with Apple and set up your team in a couple of minutes, or try the demo team first.</li>
+        </ol>
+      </div>
+      <form id="form" novalidate>
+        <div class="two">
+          <label>First name<input name="first_name" autocomplete="given-name" required maxlength="60"></label>
+          <label>Last name<input name="last_name" autocomplete="family-name" required maxlength="60"></label>
+        </div>
+        <label>Email<input name="email" type="email" autocomplete="email" inputmode="email" required maxlength="254"></label>
+        <div class="two">
+          <label>I'm a
+            <select name="role">
+              <option value="">Choose one</option>
+              <option>Head coach</option>
+              <option>Assistant coach</option>
+              <option>Athletic director</option>
+              <option>Club coach</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>School or club<input name="school" autocomplete="organization" maxlength="120"></label>
+        </div>
+        <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <button class="cta" type="submit" id="send">Request TestFlight access</button>
+        <div class="msg" id="msg" role="status"></div>
+        <p class="fine">We use your email only to send the TestFlight invite, through Apple. The app is for iPhone (iOS 17 or later).</p>
+      </form>
+    </div>
+  </section>
+
+  <footer>Team Spike · for high school cross country and track coaches</footer>
+</div>
+<script>
+(function () {
+  var API = "https://lluwkizjktpnezxmcsys.supabase.co/functions/v1/testflight-invite";
+  var form = document.getElementById("form"), send = document.getElementById("send"), msg = document.getElementById("msg");
+  function say(text, ok) { msg.textContent = text; msg.className = "msg " + (ok ? "ok" : "err"); }
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = new FormData(form), body = {};
+    f.forEach(function (v, k) { body[k] = String(v).trim(); });
+    if (!body.first_name || !body.last_name) return say("Add your first and last name.", false);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email)) return say("That email address doesn't look right.", false);
+    send.disabled = true; send.textContent = "Sending…"; msg.className = "msg";
+    fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          say(res.j.already
+            ? "You're already on the list. Look for an email from TestFlight (check spam), then open it on your iPhone."
+            : "You're in. Apple will email " + body.email + " an invitation from TestFlight. Open it on your iPhone to install Team Spike.", true);
+          form.reset();
+        } else {
+          say(res.j.error || "Something went wrong. Try again in a minute.", false);
+        }
+      })
+      .catch(function () { say("Couldn't reach the server. Check your connection and try again.", false); })
+      .then(function () { send.disabled = false; send.textContent = "Request TestFlight access"; });
+  });
+})();
+</script>
+</body>
+</html>
